@@ -77,4 +77,3 @@ Copy `RetroGoAssistant.exe` next to `rg_tool.py` so the project is auto-detected
 - **Flash says the port is busy:** another program has the COM port open.
 - **`rg_tool.py` rejects an argument:** the command lines are built in the `rg()` method, so adjust them there.
 
-Not affiliated with Retro-Go or Espressif.
