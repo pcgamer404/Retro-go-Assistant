@@ -12,14 +12,18 @@ It is a **frontend, not a replacement**: every build, image, flash and clean ope
 - Auto-detects the project: next to `rg_tool.py`, in a subfolder such as `tools/`, the last-used project, or a folder picker
 - Apps are read from `PROJECT_APPS` in `rg_tool.py` and targets from `components/retro-go/targets/*/config.h`. Nothing is hard-coded, so 3 apps or 50 all work
 - **Reload** rescans after you add an app or target
+- **Tools** menu: Edit `rg_tool.py`, Open target config, launcher and .exe builders
 - Remembers project, ESP-IDF path, target, COM port, bauds and selected apps (`%USERPROFILE%\.retrogo_assistant.json`)
 
 **Build and flash**
-- Build Selected, Build + Flash Selected (stops if the build fails), Build Image, Flash Selected, Flash Full Image, Clean Selected
+- Two clearly separated button groups:
+  - **BIN** (update apps already on the device): Build, Flash, Build + Flash (stops if the build fails), Clean, all acting on the selected apps. Fast, but it can only replace existing apps, because the partition table is not changed.
+  - **IMG** (full install, needed to add a new core or port): Build Image, **Erase + Flash Image**. Erases the whole flash (with a confirmation prompt), then flashes the full image. Untick **Erase flash first** to flash the image without erasing.
 - Scrolling app grid with "built / not built" status
 - Right-click an app: Open Folder / Build Folder / `CMakeLists.txt` / `sdkconfig`, Edit `rg_tool.py`, Build, Build + Flash, Flash, Clean, Monitor
-- Target selector, **Open Target Config**, COM port list with refresh, separate flash baud
+- Target selector, COM port list with refresh, separate flash baud
 - Stop button kills the running task and its child processes
+- Hover any action button for a short explanation of what it does
 - All output is captured in the left log, with no stray console windows (Copy / Clear)
 
 **Built-in serial monitor** (right column)
@@ -60,20 +64,19 @@ Copy `RetroGoAssistant.exe` next to `rg_tool.py` so the project is auto-detected
 
 ## Usage
 1. Check the project, target, COM port and ESP-IDF path at the top, then click **Check Environment** once.
-2. Tick the apps you want and use the action buttons.
+2. Tick the apps you want. Updating apps already on the device: use the **BIN** buttons. Adding a new core or port: use **Build Image**, then **Erase + Flash Image**.
 3. Click **Start Monitor** on the right to see the boot log and crashes.
 
 ## What each button runs
 | Button | Command |
 |---|---|
-| Build Selected | `rg_tool.py build <apps> --target <t>` |
+| Build | `rg_tool.py build <apps> --target <t>` |
+| Flash | `rg_tool.py flash <apps> --target <t> --port <p> --baud <b>` |
 | Build Image | `rg_tool.py build-img <apps> --target <t>` |
-| Flash Selected | `rg_tool.py flash <apps> --target <t> --port <p> --baud <b>` |
-| Flash Full Image | `rg_tool.py install <apps> --target <t> --port <p> --baud <b>` |
-| Clean Selected | `rg_tool.py clean <apps> --target <t>` |
+| Erase + Flash Image | `esptool erase_flash --port <p> --baud <b>`, then `rg_tool.py install <apps> --target <t> --port <p> --baud <b>` |
+| Clean | `rg_tool.py clean <apps> --target <t>` |
 
 ## Troubleshooting
 - **Monitor shows nothing:** watch the RX counter. At 0, check the COM port and press Reset Board. If it climbs but the text is garbled, pick the baud manually (the flash baud is usually not the console baud).
 - **Flash says the port is busy:** another program has the COM port open.
 - **`rg_tool.py` rejects an argument:** the command lines are built in the `rg()` method, so adjust them there.
-
