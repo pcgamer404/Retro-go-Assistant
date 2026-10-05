@@ -295,14 +295,32 @@ class Manager(tk.Tk):
             "<MouseWheel>", lambda ev: self.canvas.yview_scroll(int(-ev.delta / 120), "units")))
         self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
 
-        # actions
+        # actions: two groups side by side so the BIN and IMG workflows can't be confused
         act = ttk.Frame(self); act.pack(fill="x", padx=8, pady=4)
         self.btns = []
-        for t, c in (("Build Selected", self.a_build), ("Build + Flash Selected", self.a_build_flash),
-                     ("Build Image", self.a_build_img), ("Flash Selected", self.a_flash),
-                     ("Flash Full Image", self.a_flash_img), ("Clean Selected", self.a_clean),
-                     ("Monitor", self.a_monitor)):
-            b = ttk.Button(act, text=t, command=c); b.pack(side="left", **P); self.btns.append(b)
+        self.erase_first = tk.BooleanVar(value=True)
+
+        def group(title, hint, items):
+            g = ttk.LabelFrame(act, text=title); g.pack(side="left", fill="y", padx=(0, 8))
+            bf = ttk.Frame(g); bf.pack(fill="x")
+            made = []
+            for t, c in items:
+                b = ttk.Button(bf, text=t, command=c); b.pack(side="left", **P)
+                self.btns.append(b); made.append(b)
+            ttk.Label(g, text=hint, foreground="#666666", wraplength=400, justify="left").pack(anchor="w", padx=6, pady=(0, 3))
+            return bf, made
+
+        group("BIN  \u2014  update apps already on the device",
+              "Fast. Replaces existing apps only. Cannot add a new app (partition table is unchanged).",
+              (("Build Selected", self.a_build), ("Flash Selected", self.a_flash),
+               ("Build + Flash Selected", self.a_build_flash), ("Clean Selected", self.a_clean)))
+        bf, made = group("IMG  \u2014  full install (add new cores / ports)",
+                         "Rebuilds the whole flash layout. Required to add a new app or change partitions.",
+                         (("Build Image", self.a_build_img), ("Erase + Flash Image", self.a_flash_img)))
+        self.btn_img_flash = made[1]
+        ttk.Checkbutton(bf, text="Erase flash first", variable=self.erase_first,
+                        command=self._img_label).pack(side="left", **P)
+        ttk.Button(act, text="Monitor", command=self.a_monitor).pack(side="right", **P)
         ttk.Button(act, text="Stop", command=self.stop).pack(side="right", **P)
         self.state_lbl = ttk.Label(act, text="Idle"); self.state_lbl.pack(side="right", padx=10)
 
@@ -476,8 +494,25 @@ class Manager(tk.Tk):
     def a_flash(self):
         s = self.sel(); s and self.run([("Flash", self.rg("flash", s, True))])
 
+    def _img_label(self):
+        self.btn_img_flash.config(text="Erase + Flash Image" if self.erase_first.get() else "Flash Image")
+
     def a_flash_img(self):
-        s = self.sel(); s and self.run([("Flash Full Image (install)", self.rg("install", s, True))])
+        s = self.sel()
+        if not s:
+            return
+        steps = []
+        if self.erase_first.get():
+            if not messagebox.askyesno(
+                    "Erase + Flash Image",
+                    "This ERASES THE ENTIRE FLASH of the board on " + self.port.get() + " and then flashes the "
+                    "full image.\n\nAnything stored in internal flash (saves, settings) will be lost.\n\nContinue?",
+                    icon="warning"):
+                return
+            steps.append(("Erase Flash", [PY, "-m", "esptool", "--port", self.port.get(),
+                                          "--baud", self.baud.get(), "erase_flash"]))
+        steps.append(("Flash Full Image (install)", self.rg("install", s, True)))
+        self.run(steps)
 
     def a_clean(self):
         s = self.sel(); s and self.run([("Clean", self.rg("clean", s))])
@@ -544,7 +579,7 @@ class Manager(tk.Tk):
         result, resume = "Idle", False
         try:
             self.cur_tab = self.tab_of(steps[0][0])
-            if self.mon_proc and any(l.split()[0].lower() == "flash" for l, _ in steps):
+            if self.mon_proc and any(l.split()[0].lower() in ("flash", "erase") for l, _ in steps):
                 resume = True; self.stop_monitor(wait=True)  # free the COM port for flashing
             if not steps[0][0].startswith("Tools") and not self.prepare():
                 result = "Environment error"; return
