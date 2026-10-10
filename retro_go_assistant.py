@@ -208,11 +208,30 @@ def toolchain_prefix(chip):
 
 
 # ---------------------------------------------------------------- GUI
+class Tip:
+    """Tiny hover tooltip."""
+    def __init__(self, w, text):
+        self.w, self.text, self.tw = w, text, None
+        w.bind("<Enter>", self.show, add="+"); w.bind("<Leave>", self.hide, add="+")
+
+    def show(self, _=None):
+        if self.tw:
+            return
+        self.tw = tk.Toplevel(self.w); self.tw.wm_overrideredirect(True)
+        self.tw.wm_geometry(f"+{self.w.winfo_rootx() + 10}+{self.w.winfo_rooty() + self.w.winfo_height() + 4}")
+        tk.Label(self.tw, text=self.text, justify="left", background="#ffffe0", relief="solid",
+                 borderwidth=1, padx=6, pady=3, wraplength=380).pack()
+
+    def hide(self, _=None):
+        if self.tw:
+            self.tw.destroy(); self.tw = None
+
+
 class Manager(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Retro-Go Assistant")
-        self.geometry("1500x880")
+        self.geometry("1400x760")
         self.cfg = load_cfg()
         self.q = queue.Queue()
         self.busy, self.proc, self.stopped = False, None, False
@@ -239,51 +258,35 @@ class Manager(tk.Tk):
 
     # ---- layout
     def build_ui(self):
-        P = dict(padx=4, pady=3)
-        top = ttk.Frame(self)
-        top.pack(fill="x", padx=8, pady=6)
-        top.columnconfigure(1, weight=1)
-
-        def row(r, label, widget_fn):
-            ttk.Label(top, text=label).grid(row=r, column=0, sticky="w", **P)
-            widget_fn()
-
-        def r_proj():
-            ttk.Entry(top, textvariable=self.proj).grid(row=0, column=1, sticky="ew", **P)
-            f = ttk.Frame(top); f.grid(row=0, column=2, sticky="w")
-            for t, c in (("Browse...", self.browse_project), ("Reload", self.reload),
-                         ("Edit rg_tool.py", lambda: self.open_path("rg_tool.py"))):
-                ttk.Button(f, text=t, command=c).pack(side="left", **P)
-        row(0, "Project:", r_proj)
-
-        def r_tgt():
-            f = ttk.Frame(top); f.grid(row=1, column=1, columnspan=2, sticky="w")
-            self.cb_target = ttk.Combobox(f, textvariable=self.target, width=22, state="readonly")
-            self.cb_target.pack(side="left", **P)
-            ttk.Button(f, text="Open Target Config", command=self.open_target).pack(side="left", **P)
-            ttk.Label(f, text="   COM:").pack(side="left")
-            self.cb_port = ttk.Combobox(f, textvariable=self.port, width=9)
-            self.cb_port.pack(side="left", **P)
-            ttk.Button(f, text="Refresh", command=self.refresh_ports).pack(side="left", **P)
-            ttk.Label(f, text="   Flash baud:").pack(side="left")
-            ttk.Entry(f, textvariable=self.baud, width=10).pack(side="left", **P)
-        row(1, "Target:", r_tgt)
-
-        def r_idf():
-            ttk.Entry(top, textvariable=self.idf).grid(row=2, column=1, sticky="ew", **P)
-            f = ttk.Frame(top); f.grid(row=2, column=2, sticky="w")
-            for t, c in (("ESP-IDF...", self.browse_idf), ("Check Environment", self.check_env)):
-                ttk.Button(f, text=t, command=c).pack(side="left", **P)
-        row(2, "ESP-IDF:", r_idf)
+        P = dict(padx=3, pady=1)
+        top = ttk.Frame(self); top.pack(fill="x", padx=8, pady=(4, 2))
+        r0 = ttk.Frame(top); r0.pack(fill="x")
+        ttk.Label(r0, text="Project:", width=8).pack(side="left")
+        ttk.Button(r0, text="Reload", command=self.reload).pack(side="right", **P)
+        ttk.Button(r0, text="Browse...", command=self.browse_project).pack(side="right", **P)
+        ttk.Entry(r0, textvariable=self.proj).pack(side="left", fill="x", expand=True, **P)
+        r1 = ttk.Frame(top); r1.pack(fill="x", pady=(2, 0))
+        ttk.Label(r1, text="Target:", width=8).pack(side="left")
+        self.cb_target = ttk.Combobox(r1, textvariable=self.target, width=16, state="readonly")
+        self.cb_target.pack(side="left", **P)
+        ttk.Label(r1, text="  COM:").pack(side="left")
+        self.cb_port = ttk.Combobox(r1, textvariable=self.port, width=8); self.cb_port.pack(side="left", **P)
+        ttk.Button(r1, text="Refresh", command=self.refresh_ports).pack(side="left", **P)
+        ttk.Label(r1, text="  Flash baud:").pack(side="left")
+        ttk.Entry(r1, textvariable=self.baud, width=9).pack(side="left", **P)
+        ttk.Label(r1, text="   ESP-IDF:").pack(side="left")
+        ttk.Button(r1, text="Check Environment", command=self.check_env).pack(side="right", **P)
+        ttk.Button(r1, text="...", width=3, command=self.browse_idf).pack(side="right", **P)
+        ttk.Entry(r1, textvariable=self.idf).pack(side="left", fill="x", expand=True, **P)
 
         # apps
         lf = ttk.LabelFrame(self, text="Apps")
-        lf.pack(fill="both", expand=False, padx=8, pady=4)
+        lf.pack(fill="both", expand=False, padx=8, pady=2)
         bar = ttk.Frame(lf); bar.pack(fill="x")
         ttk.Button(bar, text="Select All", command=lambda: self.set_all(True)).pack(side="left", **P)
         ttk.Button(bar, text="Select None", command=lambda: self.set_all(False)).pack(side="left", **P)
-        ttk.Label(bar, text="(right-click an app for actions)").pack(side="right", **P)
-        self.canvas = tk.Canvas(lf, height=190, highlightthickness=0)
+        ttk.Label(bar, text="right-click an app for more actions", foreground="#666666").pack(side="right", **P)
+        self.canvas = tk.Canvas(lf, height=118, highlightthickness=0)
         sb = ttk.Scrollbar(lf, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y"); self.canvas.pack(side="left", fill="both", expand=True)
@@ -295,60 +298,68 @@ class Manager(tk.Tk):
             "<MouseWheel>", lambda ev: self.canvas.yview_scroll(int(-ev.delta / 120), "units")))
         self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
 
-        # actions: two groups side by side so the BIN and IMG workflows can't be confused
-        act = ttk.Frame(self); act.pack(fill="x", padx=8, pady=4)
+        # actions: BIN and IMG groups side by side (hover a button for details)
+        act = ttk.Frame(self); act.pack(fill="x", padx=8, pady=2)
         self.btns = []
         self.erase_first = tk.BooleanVar(value=True)
 
-        def group(title, hint, items):
-            g = ttk.LabelFrame(act, text=title); g.pack(side="left", fill="y", padx=(0, 8))
-            bf = ttk.Frame(g); bf.pack(fill="x")
+        def group(title, items):
+            g = ttk.LabelFrame(act, text=title); g.pack(side="left", padx=(0, 8))
             made = []
-            for t, c in items:
-                b = ttk.Button(bf, text=t, command=c); b.pack(side="left", **P)
-                self.btns.append(b); made.append(b)
-            ttk.Label(g, text=hint, foreground="#666666", wraplength=400, justify="left").pack(anchor="w", padx=6, pady=(0, 3))
-            return bf, made
+            for t, c, tip in items:
+                b = ttk.Button(g, text=t, command=c); b.pack(side="left", **P)
+                Tip(b, tip); self.btns.append(b); made.append(b)
+            return g, made
 
-        group("BIN  \u2014  update apps already on the device",
-              "Fast. Replaces existing apps only. Cannot add a new app (partition table is unchanged).",
-              (("Build Selected", self.a_build), ("Flash Selected", self.a_flash),
-               ("Build + Flash Selected", self.a_build_flash), ("Clean Selected", self.a_clean)))
-        bf, made = group("IMG  \u2014  full install (add new cores / ports)",
-                         "Rebuilds the whole flash layout. Required to add a new app or change partitions.",
-                         (("Build Image", self.a_build_img), ("Erase + Flash Image", self.a_flash_img)))
-        self.btn_img_flash = made[1]
-        ttk.Checkbutton(bf, text="Erase flash first", variable=self.erase_first,
-                        command=self._img_label).pack(side="left", **P)
+        group("BIN \u00b7 update apps on the device",
+              (("Build", self.a_build, "Build the selected apps."),
+               ("Flash", self.a_flash, "Flash the selected apps only. Cannot add a new app: the partition table stays as it is."),
+               ("Build + Flash", self.a_build_flash, "Build, then flash. Stops if the build fails. Existing apps only."),
+               ("Clean", self.a_clean, "Clean the selected apps' build folders.")))
+        g, made = group("IMG \u00b7 add new apps (full install)",
+                        (("Build Image", self.a_build_img,
+                          "Build the full flash image (a .img file in the project folder). Needed to add a new core or port, or to change partitions. Does not touch the device."),
+                         ("Erase + Flash Image", self.a_flash_img,
+                          "Flash the LAST BUILT .img only. It does NOT rebuild anything. Erases the whole flash first (if ticked), then writes the image."),
+                         ("Build + Erase + Flash", self.a_build_flash_img,
+                          "Builds the image first, and only then erases and flashes it, so the device is never left blank during the build.")))
+        self.btn_img_flash, self.btn_img_bflash = made[1], made[2]
+        cb = ttk.Checkbutton(g, text="Erase first", variable=self.erase_first, command=self._img_label)
+        cb.pack(side="left", **P)
+        Tip(cb, "Untick to flash the image without erasing the flash first.")
         ttk.Button(act, text="Monitor", command=self.a_monitor).pack(side="right", **P)
         ttk.Button(act, text="Stop", command=self.stop).pack(side="right", **P)
-        self.state_lbl = ttk.Label(act, text="Idle"); self.state_lbl.pack(side="right", padx=10)
+        self.state_lbl = ttk.Label(act, text="Idle"); self.state_lbl.pack(side="right", padx=8)
 
         mb = ttk.Menubutton(act, text="Tools \u25be"); mb.pack(side="right", **P)
         tm = tk.Menu(mb, tearoff=0); mb["menu"] = tm
+        tm.add_command(label="Edit rg_tool.py", command=lambda: self.open_path("rg_tool.py"))
+        tm.add_command(label="Open target config", command=self.open_target)
+        tm.add_separator()
         for t, c in (("Create run_assistant.bat launcher", self.tool_launcher),
                      ("Build standalone .exe (PyInstaller)", self.tool_exe),
                      ("Open assistant folder", lambda: os.startfile(BASE)),
-                     ("Open settings file", lambda: os.path.exists(CFG) and os.startfile(CFG))):
+                     ("Open settings file", lambda: os.path.exists(CFG) and self.open_text(CFG))):
             tm.add_command(label=t, command=c)
 
-        pw = ttk.PanedWindow(self, orient="horizontal"); pw.pack(fill="both", expand=True, padx=8, pady=4)
+        pw = ttk.PanedWindow(self, orient="horizontal"); pw.pack(fill="both", expand=True, padx=8, pady=2)
         self.texts = {}
         self.mon_rst, self.send_var = tk.BooleanVar(value=True), tk.StringVar()
-        left = ttk.LabelFrame(pw, text="Build / Flash / Output"); pw.add(left, weight=1)
+        left = ttk.Frame(pw); pw.add(left, weight=1)
         lb = ttk.Frame(left); lb.pack(fill="x")
-        ttk.Button(lb, text="Copy Logs", command=lambda: self.copy_logs("log")).pack(side="left", **P)
-        ttk.Button(lb, text="Clear Logs", command=lambda: self.texts["log"].delete("1.0", "end")).pack(side="left", **P)
+        ttk.Label(lb, text="Build / Flash / Output", font=("Segoe UI", 9, "bold")).pack(side="left", **P)
+        ttk.Button(lb, text="Copy", command=lambda: self.copy_logs("log")).pack(side="left", **P)
+        ttk.Button(lb, text="Clear", command=lambda: self.texts["log"].delete("1.0", "end")).pack(side="left", **P)
         self.texts["log"] = self.mk_text(left)
-        right = ttk.LabelFrame(pw, text="Monitor"); pw.add(right, weight=1)
+        right = ttk.Frame(pw); pw.add(right, weight=1)
         r1 = ttk.Frame(right); r1.pack(fill="x")
         self.btn_mon = ttk.Button(r1, text="Start Monitor", command=self.toggle_monitor); self.btn_mon.pack(side="left", **P)
         ttk.Button(r1, text="Reset Board", command=lambda: self.mon_send("\x00RESET")).pack(side="left", **P)
-        ttk.Button(r1, text="Copy Logs", command=lambda: self.copy_logs("monitor")).pack(side="left", **P)
-        ttk.Button(r1, text="Clear Logs", command=lambda: self.texts["monitor"].delete("1.0", "end")).pack(side="left", **P)
-        self.rx_lbl = ttk.Label(r1, text="RX: 0 bytes"); self.rx_lbl.pack(side="right", **P)
+        ttk.Button(r1, text="Copy", command=lambda: self.copy_logs("monitor")).pack(side="left", **P)
+        ttk.Button(r1, text="Clear", command=lambda: self.texts["monitor"].delete("1.0", "end")).pack(side="left", **P)
         r2 = ttk.Frame(right); r2.pack(fill="x")
-        ttk.Label(r2, text="ELF app:").pack(side="left", **P)
+        self.rx_lbl = ttk.Label(r2, text="RX: 0 bytes"); self.rx_lbl.pack(side="right", **P)
+        ttk.Label(r2, text="ELF:").pack(side="left", **P)
         self.cb_mon = ttk.Combobox(r2, textvariable=self.mon, width=16, state="readonly"); self.cb_mon.pack(side="left", **P)
         ttk.Label(r2, text="Baud:").pack(side="left", **P)
         ttk.Combobox(r2, textvariable=self.mbaud, width=9, values=["auto", "115200", "230400", "460800", "921600", "1152000"]).pack(side="left", **P)
@@ -389,9 +400,9 @@ class Manager(tk.Tk):
         if self.mon.get() not in self.cb_mon["values"]:
             self.mon.set("(auto)")
         for a in self.apps:
-            card = ttk.Frame(self.grid_fr, relief="groove", borderwidth=1, padding=4)
-            ttk.Checkbutton(card, text=a, variable=self.vars[a]).pack(anchor="w")
-            self.status[a] = ttk.Label(card, text="", foreground="#666"); self.status[a].pack(anchor="w")
+            card = ttk.Frame(self.grid_fr, relief="groove", borderwidth=1, padding=(3, 1))
+            ttk.Checkbutton(card, text=a, variable=self.vars[a]).pack(side="left")
+            self.status[a] = ttk.Label(card, text="", foreground="#666"); self.status[a].pack(side="right")
             for w in (card, *card.winfo_children()):
                 w.bind("<Button-3>", lambda e, a=a: self.ctx_menu(e, a))
             self.cards[a] = card
@@ -400,10 +411,10 @@ class Manager(tk.Tk):
         self.log(f"Project: {p}\n{len(self.apps)} apps, {len(targets)} target(s): {', '.join(targets)}\n")
 
     def layout_cards(self, width):
-        cols = max(1, width // 190)
+        cols = max(1, width // 175)
         for i, a in enumerate(self.apps):
             if a in self.cards:
-                self.cards[a].grid(row=i // cols, column=i % cols, sticky="ew", padx=3, pady=3)
+                self.cards[a].grid(row=i // cols, column=i % cols, sticky="ew", padx=2, pady=1)
         for c in range(cols):
             self.grid_fr.columnconfigure(c, weight=1)
 
@@ -444,10 +455,25 @@ class Manager(tk.Tk):
     # ---- open helpers
     def open_path(self, *parts):
         path = os.path.join(self.proj.get(), *parts)
-        if os.path.exists(path):
+        if os.path.isdir(path):
             os.startfile(path)
+        elif os.path.exists(path):
+            self.open_text(path)
         else:
             self.log(f"Not found: {path}\n")
+
+    def open_text(self, path):
+        """Open a file in Notepad++ if installed, otherwise Notepad (never run/associate it)."""
+        env = os.environ
+        cands = [shutil.which("notepad++"),
+                 os.path.join(env.get("ProgramFiles", r"C:\Program Files"), "Notepad++", "notepad++.exe"),
+                 os.path.join(env.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "Notepad++", "notepad++.exe"),
+                 os.path.join(env.get("LOCALAPPDATA", ""), "Programs", "Notepad++", "notepad++.exe")]
+        exe = next((c for c in cands if c and os.path.isfile(c)), "notepad.exe")
+        try:
+            subprocess.Popen([exe, path])
+        except OSError as e:
+            self.log(f"Could not open {path} with {exe}: {e}\n")
 
     def open_target(self):
         t = os.path.join("components", "retro-go", "targets", self.target.get())
@@ -495,24 +521,75 @@ class Manager(tk.Tk):
         s = self.sel(); s and self.run([("Flash", self.rg("flash", s, True))])
 
     def _img_label(self):
-        self.btn_img_flash.config(text="Erase + Flash Image" if self.erase_first.get() else "Flash Image")
+        e = self.erase_first.get()
+        self.btn_img_flash.config(text="Erase + Flash Image" if e else "Flash Image")
+        self.btn_img_bflash.config(text="Build + Erase + Flash" if e else "Build + Flash Image")
+
+    def find_image(self):
+        """Newest .img in the project folder (where rg_tool.py writes it), preferring the current target."""
+        p = self.proj.get()
+        found = [f for d in (p, os.path.join(p, "dist")) for f in glob.glob(os.path.join(d, "*.img"))]
+        if not found:
+            return None
+        t = self.target.get().lower()
+        mine = [f for f in found if t and t in os.path.basename(f).lower()]
+        return max(mine or found, key=os.path.getmtime)
+
+    def _flash_image_job(self, erase):
+        """Runs inside the worker. Looks the image up BEFORE erasing, so a missing image never leaves a blank board."""
+        img = self.find_image()
+        if not img:
+            self.log("\nNo .img file found in the project folder. Click 'Build Image' first.\n")
+            raise RuntimeError("no image to flash")
+        self.log(f"\nImage: {img}\nBuilt: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(os.path.getmtime(img)))}"
+                 f"  ({os.path.getsize(img) / 1048576:.1f} MB)\n")
+        port, baud = self.port.get(), self.baud.get()
+        steps = []
+        if erase:
+            steps.append(("Erase Flash", [self.py, "-m", "esptool", "--port", port, "--baud", baud, "erase_flash"]))
+        steps.append(("Write Image", [self.py, "-m", "esptool", "--port", port, "--baud", baud,
+                                      "write_flash", "--flash_size", "detect", "0x0", img]))
+        for label, argv in steps:
+            self.q.put(("state", label + "..."))
+            rc = self.stream(argv)
+            if self.stopped:
+                raise RuntimeError("stopped by user")
+            if rc != 0:
+                raise RuntimeError(f"{label} failed (exit code {rc})")
+            self.log(f"\n=== OK: {label} ===\n")
+
+    def _confirm_erase(self, extra):
+        return messagebox.askyesno(
+            "Erase + Flash Image",
+            "This ERASES THE ENTIRE FLASH of the board on " + self.port.get() + " and then flashes the image."
+            + extra + "\n\nAnything stored in internal flash (saves, settings) will be lost.\n\nContinue?",
+            icon="warning")
 
     def a_flash_img(self):
+        """Flash the last built image. Never rebuilds."""
+        img = self.find_image()
+        if not img:
+            messagebox.showinfo("Retro-Go Assistant", "No .img file found in the project folder.\nClick 'Build Image' first.")
+            return
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(img)))
+        erase = self.erase_first.get()
+        if erase and not self._confirm_erase(f"\n\nImage: {os.path.basename(img)}\nBuilt: {when}"):
+            return
+        if not erase and not messagebox.askyesno(
+                "Flash Image", f"Flash {os.path.basename(img)} (built {when}) without erasing first?"):
+            return
+        self.run([("Flash Image", lambda: self._flash_image_job(erase))])
+
+    def a_build_flash_img(self):
+        """Build the image first, THEN erase and flash, so the board stays usable during the long build."""
         s = self.sel()
         if not s:
             return
-        steps = []
-        if self.erase_first.get():
-            if not messagebox.askyesno(
-                    "Erase + Flash Image",
-                    "This ERASES THE ENTIRE FLASH of the board on " + self.port.get() + " and then flashes the "
-                    "full image.\n\nAnything stored in internal flash (saves, settings) will be lost.\n\nContinue?",
-                    icon="warning"):
-                return
-            steps.append(("Erase Flash", [PY, "-m", "esptool", "--port", self.port.get(),
-                                          "--baud", self.baud.get(), "erase_flash"]))
-        steps.append(("Flash Full Image (install)", self.rg("install", s, True)))
-        self.run(steps)
+        erase = self.erase_first.get()
+        if erase and not self._confirm_erase("\n\nThe image is built first; the erase only starts after the build succeeds."):
+            return
+        self.run([("Build Image", self.rg("build-img", s)),
+                  ("Flash Image", lambda: self._flash_image_job(erase))])
 
     def a_clean(self):
         s = self.sel(); s and self.run([("Clean", self.rg("clean", s))])
